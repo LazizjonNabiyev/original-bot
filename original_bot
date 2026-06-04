@@ -9,12 +9,12 @@
 // ================================================================
 
 // ─── SOZLAMALAR ──────────────────────────────────────────────
-const BOT_TOKEN   = "YOUR_BOT_TOKEN_HERE";        // @BotFather dan
-const CHANNEL_ID  = "YOUR_CHANNEL_ID_HERE";       // "@kanal" yoki -100xxx
+const BOT_TOKEN   = "8719817989:AAETQV3KrWDoo3XQWn6e59gK0HW9rhEjDHk";        // @BotFather dan
+const CHANNEL_ID  = "@originalshikoyatlar";       // "@kanal" yoki -100xxx
 const SHEET_NAME  = "Users";                       // Google Sheets varaq nomi
 
 // Admin Telegram ID lari (raqam, vergul bilan)
-const ADMIN_IDS   = [123456789, 987654321];        // o'zingiznikini yozing
+const ADMIN_IDS   = [920162633, 987654321];        // o'zingiznikini yozing
 
 const BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
