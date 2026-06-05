@@ -150,13 +150,15 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Default
     await msg.reply_text("🌐 Tilni tanlang / Выберите язык:", reply_markup=kb_lang())
 
-def main():
+import asyncio
+
+async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.ALL, on_message))
     print("Bot ishga tushdi...")
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
