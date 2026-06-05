@@ -1,453 +1,253 @@
 // ================================================================
-//  ORIGINAL SUPERMARKET — TELEGRAM BOT
-//  Serversiz | Google Apps Script | 24/7 bepul
-//  Funksiyalar:
-//    • Shikoyat / Lokatsiya / Murojaat + rasm
-//    • Admin panel (/admin) — stats + javob berish
-//    • Foydalanuvchilar Google Sheets da saqlanadi
-//    • O'zbekcha + Ruscha
+//  ORIGINAL SUPERMARKET BOT v5 — Stateless
+//  State saqlanmaydi — faqat tugma matni orqali ishlaydi
 // ================================================================
 
-// ─── SOZLAMALAR ──────────────────────────────────────────────
-const BOT_TOKEN   = "8719817989:AAETQV3KrWDoo3XQWn6e59gK0HW9rhEjDHk";        // @BotFather dan
-const CHANNEL_ID  = "@originalshikoyatlar";       // "@kanal" yoki -100xxx
-const SHEET_NAME  = "Users";                       // Google Sheets varaq nomi
+const BOT_TOKEN  = "8719817989:AAFUBTAK2Kw3GCLSprw-SLzleSVCUev8kaU";
+const CHANNEL_ID = "@originalshikoyatlar"; // O'zgartiring!
+const ADMIN_IDS  = [920162633];
+const BASE_URL   = "https://api.telegram.org/bot" + BOT_TOKEN;
 
-// Admin Telegram ID lari (raqam, vergul bilan)
-const ADMIN_IDS   = [920162633, 987654321];        // o'zingiznikini yozing
-
-const BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
-// ─── MATNLAR ─────────────────────────────────────────────────
-const T = {
-  uz: {
-    welcome:      `🛒 *Original Supermarket*\n\nSalom, {name}! Quyidagilardan birini tanlang:`,
-    menu_complaint: "📝 Shikoyat",
-    menu_location:  "📍 Lokatsiya",
-    menu_appeal:    "✍️ Murojaat",
-    ask_text:       "✏️ Xabaringizni yozing:",
-    ask_location:   "📍 Lokatsiyangizni yuboring yoki manzilni yozing:",
-    ask_photo:      "📸 Rasm biriktirmoqchimisiz?",
-    btn_photo_yes:  "📷 Ha, rasm yuboraman",
-    btn_photo_no:   "➡️ Yo'q, yuborish",
-    ask_photo_now:  "📸 Rasmni yuboring:",
-    btn_skip:       "⏭ O'tkazib yuborish",
-    success:        "✅ Qabul qilindi! Tez orada javob beramiz. Rahmat 🙏",
-    sending:        "⏳ Yuborilmoqda...",
-    back:           "🔙 Orqaga",
-  },
-  ru: {
-    welcome:      `🛒 *Original Supermarket*\n\nПривет, {name}! Выберите тип обращения:`,
-    menu_complaint: "📝 Жалоба",
-    menu_location:  "📍 Локация",
-    menu_appeal:    "✍️ Обращение",
-    ask_text:       "✏️ Напишите ваше сообщение:",
-    ask_location:   "📍 Отправьте геолокацию или напишите адрес:",
-    ask_photo:      "📸 Хотите прикрепить фото?",
-    btn_photo_yes:  "📷 Да, отправлю фото",
-    btn_photo_no:   "➡️ Нет, отправить",
-    ask_photo_now:  "📸 Отправьте фото:",
-    btn_skip:       "⏭ Пропустить",
-    success:        "✅ Принято! Мы ответим вам в ближайшее время. Спасибо 🙏",
-    sending:        "⏳ Отправляется...",
-    back:           "🔙 Назад",
-  }
-};
-
-// ─── STATE (xotira) ──────────────────────────────────────────
-function getState(uid) {
-  const p = PropertiesService.getUserProperties();
-  const r = p.getProperty("s_" + uid);
-  return r ? JSON.parse(r) : { step: "start", lang: null, type: null, text: null };
-}
-function setState(uid, s) {
-  PropertiesService.getUserProperties().setProperty("s_" + uid, JSON.stringify(s));
-}
-function clearState(uid) {
-  PropertiesService.getUserProperties().deleteProperty("s_" + uid);
+// ─── API ─────────────────────────────────────────────────────
+function tg(method, data) {
+  try {
+    UrlFetchApp.fetch(BASE_URL + "/" + method, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(data),
+      muteHttpExceptions: true,
+    });
+  } catch(e) {}
 }
 
-// ─── GOOGLE SHEETS ────────────────────────────────────────────
-function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(["ID", "Ism", "Username", "Til", "Sana", "Shikoyat", "Lokatsiya", "Murojaat", "Jami"]);
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
-
-function saveUser(user, lang) {
-  const sh = getSheet();
-  const data = sh.getDataRange().getValues();
-  const uid = String(user.id);
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === uid) return; // allaqachon bor
-  }
-  const name = (user.first_name || "") + (user.last_name ? " " + user.last_name : "");
-  const uname = user.username ? "@" + user.username : "—";
-  const date = Utilities.formatDate(new Date(), "Asia/Tashkent", "dd.MM.yyyy HH:mm");
-  sh.appendRow([uid, name, uname, lang.toUpperCase(), date, 0, 0, 0, 0]);
-}
-
-function incrementStat(uid, type) {
-  const sh = getSheet();
-  const data = sh.getDataRange().getValues();
-  const colMap = { complaint: 5, location: 6, appeal: 7 };
-  const col = colMap[type];
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(uid)) {
-      const row = i + 1;
-      sh.getRange(row, col + 1).setValue((data[i][col] || 0) + 1);
-      sh.getRange(row, 9).setValue((data[i][8] || 0) + 1); // jami
-      return;
-    }
-  }
-}
-
-function getStats() {
-  const sh = getSheet();
-  const data = sh.getDataRange().getValues();
-  if (data.length < 2) return { users: 0, complaint: 0, location: 0, appeal: 0, total: 0 };
-  let complaint = 0, location = 0, appeal = 0;
-  for (let i = 1; i < data.length; i++) {
-    complaint += Number(data[i][5]) || 0;
-    location  += Number(data[i][6]) || 0;
-    appeal    += Number(data[i][7]) || 0;
-  }
-  return {
-    users: data.length - 1,
-    complaint, location, appeal,
-    total: complaint + location + appeal
-  };
-}
-
-// ─── TELEGRAM YORDAMCHILAR ────────────────────────────────────
-function api(method, payload) {
-  UrlFetchApp.fetch(BASE_URL + "/" + method, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-}
-
-function sendMsg(chatId, text, keyboard) {
-  const p = { chat_id: chatId, text, parse_mode: "Markdown" };
-  if (keyboard) p.reply_markup = JSON.stringify(keyboard);
-  api("sendMessage", p);
-}
-
-function editMsg(chatId, msgId, text, keyboard) {
-  const p = { chat_id: chatId, message_id: msgId, text, parse_mode: "Markdown" };
-  if (keyboard) p.reply_markup = JSON.stringify(keyboard);
-  api("editMessageText", p);
-}
-
-function sendPhotoMsg(chatId, fileId, caption) {
-  api("sendPhoto", { chat_id: chatId, photo: fileId, caption, parse_mode: "Markdown" });
-}
-
-function answerCb(id) {
-  api("answerCallbackQuery", { callback_query_id: id });
-}
-
-function removeKeyboard(chatId) {
-  api("sendMessage", {
-    chat_id: chatId,
-    text: "...",
-    reply_markup: JSON.stringify({ remove_keyboard: true }),
-  });
-  // kichik xabarni o'chirib yuborish mumkin emas, lekin keyboard ketadi
+function sendMsg(chatId, text, kb) {
+  const p = { chat_id: chatId, text: text };
+  if (kb) p.reply_markup = JSON.stringify(kb);
+  tg("sendMessage", p);
 }
 
 // ─── KLAVIATURALAR ────────────────────────────────────────────
 function kbLang() {
-  return { inline_keyboard: [[
-    { text: "🇺🇿 O'zbekcha", callback_data: "lang_uz" },
-    { text: "🇷🇺 Русский",   callback_data: "lang_ru" },
-  ]]};
-}
-
-function kbMenu(lang) {
-  const t = T[lang];
-  return { inline_keyboard: [
-    [{ text: t.menu_complaint, callback_data: "type_complaint" }],
-    [{ text: t.menu_location,  callback_data: "type_location"  }],
-    [{ text: t.menu_appeal,    callback_data: "type_appeal"    }],
-  ]};
-}
-
-function kbPhoto(lang) {
-  const t = T[lang];
-  return { inline_keyboard: [[
-    { text: t.btn_photo_yes, callback_data: "photo_yes" },
-    { text: t.btn_photo_no,  callback_data: "photo_no"  },
-  ]]};
-}
-
-function kbSkip(lang) {
-  return { inline_keyboard: [[
-    { text: T[lang].btn_skip, callback_data: "photo_skip" },
-  ]]};
-}
-
-function kbBack(lang) {
-  return { inline_keyboard: [[
-    { text: T[lang].back, callback_data: "back_menu" },
-  ]]};
-}
-
-// ─── ADMIN PANEL ──────────────────────────────────────────────
-function isAdmin(uid) {
-  return ADMIN_IDS.includes(Number(uid));
-}
-
-function sendAdminPanel(chatId) {
-  const s = getStats();
-  const text =
-    `🔧 *Admin Panel — Original Supermarket*\n\n` +
-    `👥 Foydalanuvchilar: *${s.users}*\n\n` +
-    `📊 *Murojaatlar:*\n` +
-    `📝 Shikoyat: *${s.complaint}*\n` +
-    `📍 Lokatsiya: *${s.location}*\n` +
-    `✍️ Murojaat: *${s.appeal}*\n` +
-    `━━━━━━━━━━━━\n` +
-    `📦 Jami: *${s.total}*`;
-
-  const kb = { inline_keyboard: [
-    [{ text: "📊 Google Sheets ko'rish", callback_data: "admin_sheet" }],
-    [{ text: "🔄 Yangilash", callback_data: "admin_refresh" }],
-  ]};
-  sendMsg(chatId, text, kb);
-}
-
-// ─── KANALGA YUBORISH ─────────────────────────────────────────
-function buildChannelText(state, user) {
-  const labels = {
-    uz: { complaint: "📝 SHIKOYAT", location: "📍 LOKATSIYA", appeal: "✍️ MUROJAAT" },
-    ru: { complaint: "📝 ЖАЛОБА",   location: "📍 ЛОКАЦИЯ",   appeal: "✍️ ОБРАЩЕНИЕ" },
+  return {
+    keyboard: [[{ text: "🇺🇿 O'zbekcha" }, { text: "🇷🇺 Русский" }]],
+    resize_keyboard: true, one_time_keyboard: true
   };
-  const lang  = state.lang || "uz";
-  const label = labels[lang][state.type];
-  const name  = [user.first_name, user.last_name].filter(Boolean).join(" ");
+}
+
+function kbMenu() {
+  return {
+    keyboard: [
+      [{ text: "📝 Shikoyat" }, { text: "📝 Жалоба" }],
+      [{ text: "📍 Lokatsiya" }, { text: "📍 Локация" }],
+      [{ text: "✍️ Murojaat" }, { text: "✍️ Обращение" }]
+    ],
+    resize_keyboard: true
+  };
+}
+
+function kbAsk(uz, ru) {
+  return {
+    keyboard: [[{ text: uz }, { text: ru }]],
+    resize_keyboard: true, one_time_keyboard: true
+  };
+}
+
+function kbSkip() {
+  return {
+    keyboard: [[{ text: "⏭ O'tkazib yuborish / Пропустить" }]],
+    resize_keyboard: true, one_time_keyboard: true
+  };
+}
+
+function removeKb() {
+  return { remove_keyboard: true };
+}
+
+// ─── FORCE REPLY — matn kiritishga majburlash ────────────────
+function forceReply() {
+  return { force_reply: true, selective: true };
+}
+
+// ─── SHEETS ───────────────────────────────────────────────────
+function saveUser(user) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sh = ss.getSheetByName("Users");
+    if (!sh) {
+      sh = ss.insertSheet("Users");
+      sh.appendRow(["ID", "Ism", "Username", "Sana"]);
+    }
+    const data = sh.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(user.id)) return;
+    }
+    const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
+    const date = Utilities.formatDate(new Date(), "Asia/Tashkent", "dd.MM.yyyy HH:mm");
+    sh.appendRow([user.id, name, user.username || "—", date]);
+  } catch(e) {}
+}
+
+// ─── KANAL ────────────────────────────────────────────────────
+function sendToChannel(type, text, user, photoId) {
+  const typeMap = {
+    "📝 Shikoyat": "📝 SHIKOYAT", "📝 Жалоба": "📝 ЖАЛОБА",
+    "📍 Lokatsiya": "📍 LOKATSIYA", "📍 Локация": "📍 ЛОКАЦИЯ",
+    "✍️ Murojaat": "✍️ MUROJAAT", "✍️ Обращение": "✍️ ОБРАЩЕНИЕ",
+  };
+  const label = typeMap[type] || "📩 XABAR";
+  const name  = [user.first_name, user.last_name].filter(Boolean).join(" ") || "—";
   const uname = user.username ? "@" + user.username : "—";
   const date  = Utilities.formatDate(new Date(), "Asia/Tashkent", "dd.MM.yyyy HH:mm");
 
-  return (
-    `${label}\n` +
-    `━━━━━━━━━━━━━━\n` +
-    `👤 *Ism:* ${name}\n` +
-    `🔗 *Username:* ${uname}\n` +
-    `🆔 *ID:* \`${user.id}\`\n` +
-    `🌐 *Til:* ${lang === "uz" ? "O'zbek" : "Русский"}\n` +
-    `━━━━━━━━━━━━━━\n` +
-    `💬 ${state.text || "—"}\n` +
-    `━━━━━━━━━━━━━━\n` +
-    `🕐 ${date}\n\n` +
-    `_Javob berish uchun foydalanuvchi ID: \`${user.id}\`_`
-  );
-}
+  const msg =
+    label + "\n" +
+    "━━━━━━━━━━━━━━\n" +
+    "👤 " + name + "\n" +
+    "🔗 " + uname + "\n" +
+    "🆔 " + user.id + "\n" +
+    "━━━━━━━━━━━━━━\n" +
+    "💬 " + text + "\n" +
+    "━━━━━━━━━━━━━━\n" +
+    "🕐 " + date;
 
-function sendToChannel(state, user, photoId) {
-  const text = buildChannelText(state, user);
   if (photoId) {
-    sendPhotoMsg(CHANNEL_ID, photoId, text);
+    tg("sendPhoto", { chat_id: CHANNEL_ID, photo: photoId, caption: msg });
   } else {
-    sendMsg(CHANNEL_ID, text);
+    tg("sendMessage", { chat_id: CHANNEL_ID, text: msg });
   }
 }
 
-// ─── JAVOB BERISH (Admin reply) ───────────────────────────────
-// Admin kanalda xabarga reply qilganda, bot foydalanuvchiga yuboradi
-// Bu funksiya adminning /reply <user_id> <xabar> buyrug'ini ham qabul qiladi
-function handleAdminReply(msg) {
-  // Kanal postiga reply bo'lsa
-  if (msg.reply_to_message && msg.reply_to_message.text) {
-    const original = msg.reply_to_message.text;
-    const match = original.match(/ID: `(\d+)`/);
-    if (match) {
-      const targetId = match[1];
-      const adminName = msg.from.first_name || "Admin";
-      const replyText = `📩 *Original Supermarket javobi:*\n\n${msg.text}\n\n_— ${adminName}_`;
-      sendMsg(targetId, replyText);
-      sendMsg(msg.chat.id, "✅ Javob yuborildi!");
-      return true;
-    }
-  }
-  // /reply <id> <xabar> buyrug'i
-  const replyMatch = (msg.text || "").match(/^\/reply (\d+) (.+)/s);
-  if (replyMatch) {
-    const targetId = replyMatch[1];
-    const replyText = `📩 *Original Supermarket javobi:*\n\n${replyMatch[2]}`;
-    sendMsg(targetId, replyText);
-    sendMsg(msg.chat.id, "✅ Javob yuborildi!");
-    return true;
-  }
-  return false;
-}
-
-// ─── ASOSIY WEBHOOK ───────────────────────────────────────────
-function doPost(e) {
+// ─── STATE (Properties — eng ishonchli) ──────────────────────
+function getS(uid) {
   try {
-    const update = JSON.parse(e.postData.contents);
-    if (update.callback_query) handleCallback(update.callback_query);
-    else if (update.message)   handleMessage(update.message);
-  } catch(err) {
-    Logger.log("Error: " + err);
-  }
-  return ContentService.createTextOutput("OK");
+    const v = PropertiesService.getScriptProperties().getProperty("u" + uid);
+    return v ? JSON.parse(v) : {};
+  } catch(e) { return {}; }
+}
+function setS(uid, s) {
+  try {
+    PropertiesService.getScriptProperties().setProperty("u" + uid, JSON.stringify(s));
+  } catch(e) {}
+}
+function delS(uid) {
+  try {
+    PropertiesService.getScriptProperties().deleteProperty("u" + uid);
+  } catch(e) {}
 }
 
-// ─── CALLBACK ────────────────────────────────────────────────
-function handleCallback(cb) {
-  answerCb(cb.id);
-  const chatId = cb.message.chat.id;
-  const uid    = cb.from.id;
-  const data   = cb.data;
-  const state  = getState(uid);
-
-  if (data.startsWith("lang_")) {
-    const lang = data.replace("lang_", "");
-    saveUser(cb.from, lang);
-    setState(uid, { step: "menu", lang, type: null, text: null });
-    const name = cb.from.first_name || "Do'stim";
-    sendMsg(chatId, T[lang].welcome.replace("{name}", name), kbMenu(lang));
-    return;
-  }
-
-  if (data.startsWith("type_")) {
-    const type = data.replace("type_", "");
-    const lang = state.lang || "uz";
-    setState(uid, { ...state, step: "get_text", type });
-    const prompt = type === "location" ? T[lang].ask_location : T[lang].ask_text;
-    sendMsg(chatId, prompt, kbBack(lang));
-    return;
-  }
-
-  if (data === "back_menu") {
-    const lang = state.lang || "uz";
-    setState(uid, { step: "menu", lang, type: null, text: null });
-    const name = cb.from.first_name || "Do'stim";
-    sendMsg(chatId, T[lang].welcome.replace("{name}", name), kbMenu(lang));
-    return;
-  }
-
-  if (data === "photo_yes") {
-    const lang = state.lang || "uz";
-    setState(uid, { ...state, step: "get_photo" });
-    sendMsg(chatId, T[lang].ask_photo_now, kbSkip(lang));
-    return;
-  }
-
-  if (data === "photo_no") {
-    finish(chatId, uid, cb.from, state, null);
-    return;
-  }
-
-  if (data === "photo_skip") {
-    finish(chatId, uid, cb.from, state, null);
-    return;
-  }
-
-  if (data === "admin_refresh") {
-    sendAdminPanel(chatId);
-    return;
-  }
-
-  if (data === "admin_sheet") {
-    const url = SpreadsheetApp.getActiveSpreadsheet().getUrl();
-    sendMsg(chatId, `📊 [Google Sheets ni ochish](${url})`);
-    return;
-  }
+// ─── WEBHOOK ──────────────────────────────────────────────────
+function doPost(e) {
+  const out = ContentService.createTextOutput("OK");
+  try {
+    const upd = JSON.parse(e.postData.contents);
+    if (upd.message) onMsg(upd.message);
+  } catch(err) { Logger.log(err); }
+  return out;
 }
 
-// ─── MESSAGE ─────────────────────────────────────────────────
-function handleMessage(msg) {
+function onMsg(msg) {
   const chatId = msg.chat.id;
-  const uid    = msg.from.id;
-  const text   = msg.text || "";
-  const state  = getState(uid);
+  const uid    = String(msg.from.id);
+  const text   = (msg.text || "").trim();
+  const s      = getS(uid);
 
-  // /start
+  // /start — har doim
   if (text === "/start") {
-    clearState(uid);
+    delS(uid);
     sendMsg(chatId, "🌐 Tilni tanlang / Выберите язык:", kbLang());
     return;
   }
 
-  // Admin buyruqlari
-  if (isAdmin(uid)) {
-    if (text === "/admin") {
-      sendAdminPanel(chatId);
+  // Admin
+  if (ADMIN_IDS.includes(Number(uid))) {
+    if (text === "/stats") {
+      try {
+        const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+        sendMsg(chatId, "👥 Foydalanuvchilar: " + (sh ? sh.getLastRow() - 1 : 0));
+      } catch(e) { sendMsg(chatId, "Xato"); }
       return;
     }
-    if (handleAdminReply(msg)) return;
-  }
-
-  const lang = state.lang || "uz";
-  const step = state.step;
-
-  // Matn yoki lokatsiya kiritish
-  if (step === "get_text") {
-    let content = text;
-    if (msg.location) {
-      content = `📍 Geo: ${msg.location.latitude}, ${msg.location.longitude}`;
+    const rm = text.match(/^\/reply (\d+) (.+)/s);
+    if (rm) {
+      tg("sendMessage", { chat_id: rm[1], text: "📩 Original Supermarket:\n\n" + rm[2] });
+      sendMsg(chatId, "✅ Yuborildi!");
+      return;
     }
-    if (!content) return;
-    setState(uid, { ...state, step: "ask_photo", text: content });
-    sendMsg(chatId, T[lang].ask_photo, kbPhoto(lang));
-    return;
   }
 
-  // Rasm kutilayotgan vaqt
-  if (step === "get_photo") {
-    if (msg.photo) {
-      const fileId = msg.photo[msg.photo.length - 1].file_id;
-      finish(chatId, uid, msg.from, state, fileId);
-    } else {
-      finish(chatId, uid, msg.from, state, null);
-    }
-    return;
-  }
-
-  // Boshqa holat — menyuga qaytarish
-  if (step === "menu" || step === "start") {
+  // Til tanlash
+  if (text === "🇺🇿 O'zbekcha" || text === "🇷🇺 Русский") {
+    const lang = text.includes("O'zbekcha") ? "uz" : "ru";
+    saveUser(msg.from);
+    setS(uid, { step: "menu", lang: lang });
     const name = msg.from.first_name || "Do'stim";
-    sendMsg(chatId, T[lang].welcome.replace("{name}", name), kbMenu(lang));
+    const w = lang === "uz"
+      ? "Salom, " + name + "! Murojaat turini tanlang:"
+      : "Привет, " + name + "! Выберите тип обращения:";
+    sendMsg(chatId, "🛒 Original Supermarket\n\n" + w, kbMenu());
+    return;
   }
+
+  // Menyu
+  const menuTypes = ["📝 Shikoyat","📝 Жалоба","📍 Lokatsiya","📍 Локация","✍️ Murojaat","✍️ Обращение"];
+  if (menuTypes.includes(text)) {
+    setS(uid, { ...s, step: "get_text", type: text });
+    const isLoc = text.includes("Lokata") || text.includes("Локац");
+    const prompt = isLoc
+      ? "📍 Lokatsiyangizni yuboring yoki manzilni yozing:\n📍 Отправьте геолокацию или адрес:"
+      : "✏️ Xabaringizni yozing:\n✏️ Напишите ваше сообщение:";
+    sendMsg(chatId, prompt, forceReply());
+    return;
+  }
+
+  // Matn kiritish
+  if (s.step === "get_text") {
+    let content = text;
+    if (msg.location) content = "Geo: " + msg.location.latitude + ", " + msg.location.longitude;
+    if (!content) return;
+    setS(uid, { ...s, step: "ask_photo", text: content });
+    sendMsg(chatId,
+      "📸 Rasm biriktirmoqchimisiz? / Хотите прикрепить фото?",
+      kbAsk("📷 Ha, rasm", "➡️ Yo'q, yuborish")
+    );
+    return;
+  }
+
+  // Rasm so'rash
+  if (s.step === "ask_photo") {
+    if (text === "📷 Ha, rasm") {
+      setS(uid, { ...s, step: "get_photo" });
+      sendMsg(chatId, "📸 Rasmni yuboring: / Отправьте фото:", kbSkip());
+      return;
+    }
+    // Yo'q
+    sendToChannel(s.type, s.text, msg.from, null);
+    delS(uid);
+    sendMsg(chatId, "✅ Qabul qilindi! / Принято! 🙏", kbMenu());
+    return;
+  }
+
+  // Rasm olish
+  if (s.step === "get_photo") {
+    let photoId = null;
+    if (msg.photo) photoId = msg.photo[msg.photo.length - 1].file_id;
+    sendToChannel(s.type, s.text, msg.from, photoId);
+    delS(uid);
+    sendMsg(chatId, "✅ Qabul qilindi! / Принято! 🙏", kbMenu());
+    return;
+  }
+
+  // Noma'lum — menyuga qaytarish
+  sendMsg(chatId, "🌐 Tilni tanlang / Выберите язык:", kbLang());
 }
 
-// ─── YAKUNLASH ────────────────────────────────────────────────
-function finish(chatId, uid, user, state, photoId) {
-  const lang = state.lang || "uz";
-  sendMsg(chatId, T[lang].sending);
-  sendToChannel(state, user, photoId);
-  incrementStat(uid, state.type);
-  clearState(uid);
-  const name = user.first_name || "Do'stim";
-  sendMsg(chatId, T[lang].success, kbMenu(lang));
-}
-
-// ================================================================
-//  O'RNATISH (bir marta ishlatiladi)
-// ================================================================
-
-// 1) Webhook o'rnatish
+// ─── SETUP ────────────────────────────────────────────────────
 function setWebhook() {
   const url = ScriptApp.getService().getUrl();
-  const res = UrlFetchApp.fetch(`${BASE_URL}/setWebhook?url=${encodeURIComponent(url)}`);
+  const res = UrlFetchApp.fetch(BASE_URL + "/setWebhook?url=" + encodeURIComponent(url) + "&drop_pending_updates=true");
   Logger.log(res.getContentText());
 }
 
-// 2) Webhook o'chirish
 function deleteWebhook() {
-  Logger.log(UrlFetchApp.fetch(`${BASE_URL}/deleteWebhook`).getContentText());
-}
-
-// 3) Bot ma'lumotlarini tekshirish
-function getMe() {
-  Logger.log(UrlFetchApp.fetch(`${BASE_URL}/getMe`).getContentText());
+  Logger.log(UrlFetchApp.fetch(BASE_URL + "/deleteWebhook?drop_pending_updates=true").getContentText());
 }
