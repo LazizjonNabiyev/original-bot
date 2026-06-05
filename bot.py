@@ -158,7 +158,10 @@ async def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.ALL, on_message))
     print("Bot ishga tushdi...")
-    await app.run_polling()
+    async with app:
+        await app.start()
+        await app.updater.start_polling()
+        await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
