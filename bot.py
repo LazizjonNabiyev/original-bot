@@ -249,12 +249,12 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📸 Instagram", url=INSTAGRAM)],
             [InlineKeyboardButton("💬 Telegram", url="https://t.me/original_supermarket")],
         ])
-        contact_text = (
-            "📞 *Bog'lanish / Контакты*\n\n"
-            "📹 INSTAGRAM: original\_supermarket\_\n"
-            "💬 TELEGRAM: @original\_supermarket"
+        await ctx.bot.send_photo(
+            chat_id=uid,
+            photo="AgACAgIAAxkBAAIHSWpFcKFT4Fwdc3E_p8XjxoLu9AOeAAIyGWsbRO0wSn11uPruO1auAQADAgADeQADPAQ",
+            reply_markup=kb
         )
-        await msg.reply_text(contact_text, parse_mode="Markdown", reply_markup=kb); return
+        return
 
     if text in ["💼 Vakansiyalar","💼 Вакансии"]:
         active=[(vid,v) for vid,v in vacancies.items() if v.get("active")]
