@@ -79,6 +79,13 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s    = get_s(uid)
     lang = s.get("lang","uz")
 
+    # Rasm kelsa file_id ni logga chiqar
+    if msg.photo:
+        file_id = msg.photo[-1].file_id
+        logging.info(f"PHOTO FILE_ID: {file_id}")
+        await msg.reply_text(f"file_id: {file_id}")
+        return
+
     if text=="/start":
         del_s(uid)
         await msg.reply_text("🌐 Tilni tanlang / Выберите язык:", reply_markup=kb_lang())
