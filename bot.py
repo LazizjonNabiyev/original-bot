@@ -1,4 +1,4 @@
-import os, asyncio, logging
+import os, asyncio, logging, sqlite3
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from flask import Flask, request
@@ -16,6 +16,51 @@ LOCATION_URL = "https://maps.app.goo.gl/SkDRLYso1tjY9xmF9"
 user_state  = {}
 vacancies   = {}
 vac_counter = [0]
+
+# ─── SQLite DB ───────────────────────────────────────────────
+DB_PATH = os.environ.get("DB_PATH", "/data/users.db")
+
+def init_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+        uid TEXT PRIMARY KEY,
+        name TEXT,
+        phone TEXT,
+        lang TEXT,
+        date TEXT
+    )''')
+    conn.commit()
+    conn.close()
+
+def save_user_db(uid, name, phone, lang):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT OR IGNORE INTO users (uid, name, phone, lang, date) VALUES (?,?,?,?,datetime('now','localtime'))",
+            (str(uid), name, phone, lang)
+        )
+        conn.commit()
+        conn.close()
+    except: pass
+
+def user_exists_db(uid):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute("SELECT uid FROM users WHERE uid=?", (str(uid),)).fetchone()
+        conn.close()
+        return row is not None
+    except: return False
+
+def get_users_count():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        conn.close()
+        return count
+    except: return 0
+
+init_db()
 
 def get_s(uid): return user_state.get(str(uid), {})
 def set_s(uid, s): user_state[str(uid)] = s
@@ -52,6 +97,13 @@ def kb_photo(lang):
     if lang=="ru": return ReplyKeyboardMarkup([["📷 Да, фото","➡️ Нет, отправить"]], resize_keyboard=True, one_time_keyboard=True)
     return ReplyKeyboardMarkup([["📷 Ha, rasm","➡️ Yo'q, yuborish"]], resize_keyboard=True, one_time_keyboard=True)
 
+def kb_contact():
+    from telegram import KeyboardButton
+    return ReplyKeyboardMarkup(
+        [[KeyboardButton("📱 Raqamni ulashish / Поделиться номером", request_contact=True)]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
+
 def kb_skip(lang):
     return ReplyKeyboardMarkup([["⏭ O'tkazib yuborish" if lang=="uz" else "⏭ Пропустить"]], resize_keyboard=True, one_time_keyboard=True)
 
@@ -79,13 +131,6 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     s    = get_s(uid)
     lang = s.get("lang","uz")
 
-    # Rasm kelsa file_id ni logga chiqar
-    if msg.photo:
-        file_id = msg.photo[-1].file_id
-        logging.info(f"PHOTO FILE_ID: {file_id}")
-        await msg.reply_text(f"file_id: {file_id}")
-        return
-
     if text=="/start":
         del_s(uid)
         await msg.reply_text("🌐 Tilni tanlang / Выберите язык:", reply_markup=kb_lang())
@@ -111,7 +156,7 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Asosiy menyu:", reply_markup=kb_menu(lang)); return
         if text=="📊 Statistika":
             vc=len([v for v in vacancies.values() if v.get("active")])
-            await msg.reply_text(f"📊 Statistika\n\n💼 Faol vakansiyalar: {vc}\n👤 Adminlar: {len(ADMIN_IDS)}"); return
+            await msg.reply_text(f"📊 Statistika\n\n👥 Foydalanuvchilar: {get_users_count()}\n💼 Faol vakansiyalar: {vc}\n👤 Adminlar: {len(ADMIN_IDS)}"); return
         if text=="👤 Admin qo'shish":
             set_s(uid,{**s,"admin_step":"add_admin"})
             await msg.reply_text("Yangi admin Telegram ID sini yuboring:"); return
@@ -151,14 +196,37 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
     if text=="🇺🇿 O'zbekcha":
-        set_s(uid,{"step":"menu","lang":"uz"})
         name=msg.from_user.first_name or "Do'stim"
-        await msg.reply_text(f"🛒 Original Supermarket\n\nSalom, {name}! Tanlang:", reply_markup=kb_menu("uz")); return
+        if not user_exists_db(uid):
+            set_s(uid,{"step":"get_phone","lang":"uz"})
+            await msg.reply_text(f"Salom, {name}! 👋\n\n📱 Telefon raqamingizni ulashing:", reply_markup=kb_contact())
+        else:
+            set_s(uid,{"step":"menu","lang":"uz","registered":True})
+            await msg.reply_text(f"🛒 Original Supermarket\n\nSalom, {name}! Tanlang:", reply_markup=kb_menu("uz"))
+        return
 
     if text=="🇷🇺 Русский":
-        set_s(uid,{"step":"menu","lang":"ru"})
         name=msg.from_user.first_name or "Друг"
-        await msg.reply_text(f"🛒 Original Supermarket\n\nПривет, {name}! Выберите:", reply_markup=kb_menu("ru")); return
+        if not user_exists_db(uid):
+            set_s(uid,{"step":"get_phone","lang":"ru"})
+            await msg.reply_text(f"Привет, {name}! 👋\n\n📱 Поделитесь номером телефона:", reply_markup=kb_contact())
+        else:
+            set_s(uid,{"step":"menu","lang":"ru","registered":True})
+            await msg.reply_text(f"🛒 Original Supermarket\n\nПривет, {name}! Выберите:", reply_markup=kb_menu("ru"))
+        return
+
+    if s.get("step")=="get_phone":
+        phone=""
+        if msg.contact: phone=msg.contact.phone_number
+        elif text: phone=text
+        if not phone:
+            await msg.reply_text("📱 Iltimos raqamni ulashing:" if lang=="uz" else "📱 Поделитесь номером:", reply_markup=kb_contact())
+            return
+        name=msg.from_user.first_name or "Do'stim"
+        save_user_db(uid, name, phone, lang)
+        set_s(uid,{"step":"menu","lang":lang,"registered":True,"phone":phone})
+        await msg.reply_text(f"✅ Qabul qilindi!\n\n🛒 Original Supermarket\n\nSalom, {name}! Tanlang:" if lang=="uz" else f"✅ Принято!\n\n🛒 Original Supermarket\n\nПривет, {name}! Выберите:", reply_markup=kb_menu(lang))
+        return
 
     if text in ["🔙 Orqaga","🔙 Назад"]:
         set_s(uid,{"step":"menu","lang":lang})
