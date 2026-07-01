@@ -10,8 +10,7 @@ CHANNEL_ID  = os.environ.get("CHANNEL_ID", "")
 ADMIN_IDS   = [int(x) for x in os.environ.get("ADMIN_IDS", "920162633").split(",") if x]
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://original-bot-production-f466.up.railway.app")
 
-PHONE        = "+998914654068"
-PHONE        = "+998914654068"
+
 INSTAGRAM    = "https://instagram.com/original_supermarket_"
 LOCATION_URL = "https://maps.app.goo.gl/SkDRLYso1tjY9xmF9"
 
