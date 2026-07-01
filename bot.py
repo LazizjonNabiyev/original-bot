@@ -175,7 +175,7 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📸 Instagram", url=INSTAGRAM)],
             [InlineKeyboardButton("💬 Telegram", url="https://t.me/LazizjonNabiyev")],
         ])
-        await msg.reply_text(f"📞 Bog'lanish\n\n📱 {PHONE}\n📸 @original_supermarket_\n💬 @LazizjonNabiyev", reply_markup=kb); return
+        await msg.reply_text(f"📞 Bog'lanish\n\n📱 {PHONE}\n📸 @original_supermarket_\n💬  @original_supermarket", reply_markup=kb); return
 
     if text in ["💼 Vakansiyalar","💼 Вакансии"]:
         active=[(vid,v) for vid,v in vacancies.items() if v.get("active")]
