@@ -172,9 +172,16 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text in ["📞 Bog'lanish","📞 Контакты"]:
         kb=InlineKeyboardMarkup([
             [InlineKeyboardButton("📸 Instagram", url=INSTAGRAM)],
-            [InlineKeyboardButton("💬 Telegram", url="https://t.me/LazizjonNabiyev")],
+            [InlineKeyboardButton("💬 Telegram", url="https://t.me/original_supermarket")],
         ])
-        await msg.reply_text(f"📞 Bog'lanish\n\n📱 {PHONE}\n📸 @original_supermarket_\n💬 @LazizjonNabiyev", reply_markup=kb); return
+        await msg.reply_text(
+            "📞 *Bog'lanish / Контакты*
+
+"
+            "📹 INSTAGRAM: original\_supermarket\_
+"
+            "💬 TELEGRAM: @original\_supermarket",
+            parse_mode="Markdown", reply_markup=kb); return
 
     if text in ["💼 Vakansiyalar","💼 Вакансии"]:
         active=[(vid,v) for vid,v in vacancies.items() if v.get("active")]
@@ -183,7 +190,6 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         result="💼 Bo'sh ish o'rinlari:\n\n" if lang=="uz" else "💼 Вакансии:\n\n"
         for vid,v in active:
             result+=f"🔹 *{v['title']}*\n{v['desc']}\n\n"
-        result+=f"📞 {PHONE}"
         await msg.reply_text(result, parse_mode="Markdown"); return
 
     if s.get("step")=="get_text":
