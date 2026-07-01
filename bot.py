@@ -10,7 +10,6 @@ CHANNEL_ID  = os.environ.get("CHANNEL_ID", "")
 ADMIN_IDS   = [int(x) for x in os.environ.get("ADMIN_IDS", "920162633").split(",") if x]
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://original-bot-production-f466.up.railway.app")
 
-
 INSTAGRAM    = "https://instagram.com/original_supermarket_"
 LOCATION_URL = "https://maps.app.goo.gl/SkDRLYso1tjY9xmF9"
 
@@ -175,7 +174,7 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📸 Instagram", url=INSTAGRAM)],
             [InlineKeyboardButton("💬 Telegram", url="https://t.me/LazizjonNabiyev")],
         ])
-        await msg.reply_text(f"📞 Bog'lanish\n\n📱 {PHONE}\n📸 @original_supermarket_\n💬  @original_supermarket", reply_markup=kb); return
+        await msg.reply_text(f"📞 Bog'lanish\n\n📱 {PHONE}\n📸 @original_supermarket_\n💬 @LazizjonNabiyev", reply_markup=kb); return
 
     if text in ["💼 Vakansiyalar","💼 Вакансии"]:
         active=[(vid,v) for vid,v in vacancies.items() if v.get("active")]
