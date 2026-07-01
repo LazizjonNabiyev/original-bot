@@ -10,11 +10,10 @@ CHANNEL_ID  = os.environ.get("CHANNEL_ID", "")
 ADMIN_IDS   = [int(x) for x in os.environ.get("ADMIN_IDS", "920162633").split(",") if x]
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://original-bot-production-f466.up.railway.app")
 
-
+PHONE        = "+998914654068"
+PHONE        = "+998914654068"
 INSTAGRAM    = "https://instagram.com/original_supermarket_"
 LOCATION_URL = "https://maps.app.goo.gl/SkDRLYso1tjY9xmF9"
-LOC_LAT      = 38.830873
-LOC_LON      = 65.784605
 
 user_state  = {}
 vacancies   = {}
@@ -169,13 +168,6 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     if text in ["📍 Lokatsiya","📍 Локация"]:
-        await ctx.bot.send_venue(
-            chat_id=uid,
-            latitude=LOC_LAT,
-            longitude=LOC_LON,
-            title="Оригинал",
-            address="Qarshi, Qashqadaryo"
-        )
         kb=InlineKeyboardMarkup([[InlineKeyboardButton("🗺 Google Maps", url=LOCATION_URL)]])
         await msg.reply_text("📍 Original Supermarket\n\nQarshi, Qashqadaryo\nRQJM+9Q9", reply_markup=kb); return
 
