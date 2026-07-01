@@ -241,8 +241,8 @@ async def handle_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     if text in ["📍 Lokatsiya","📍 Локация"]:
-        kb=InlineKeyboardMarkup([[InlineKeyboardButton("🗺 Google Maps", url=LOCATION_URL)]])
-        await msg.reply_text("📍 Original Supermarket\n\nQarshi, Qashqadaryo\nRQJM+9Q9", reply_markup=kb); return
+        kb=InlineKeyboardMarkup([[InlineKeyboardButton("📍 Google Maps da ochish", url="https://www.google.com/maps?q=38.830873,65.784605&ll=38.830873,65.784605&z=16")]])
+        await msg.reply_text("📍 Original Supermarket\n\nQarshi, Qashqadaryo", reply_markup=kb); return
 
     if text in ["📞 Bog'lanish","📞 Контакты"]:
         kb=InlineKeyboardMarkup([
